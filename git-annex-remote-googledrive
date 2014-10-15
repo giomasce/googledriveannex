@@ -148,15 +148,35 @@ def postFile(subject, filename, folder):
     org_execute = gdrequest.execute
     gdrequest.execute = injectexecute
 
-    file = gdrequest.execute()  
-    gdrequest.execute = org_execute
+    file=""
 
-    if file:
-        common.log("Done: " + repr(file["id"]))
-        return True
-    else:
-        common.log("Failure: " + repr(file))
-        return False
+    for n in range(0, 5):
+        try:
+            
+            file = gdrequest.execute()  
+
+            if file:
+                common.log("Done: " + repr(file["id"]))
+                return True
+            else:
+                common.log("Failure: " + repr(file))
+                return False
+       except errors.HttpError, e:
+          error = simplejson.loads(e.content)
+          if error.get('code') == 500 and \
+#              error.get('errors')[0].get('reason') \
+ #             in ['rateLimitExceeded', 'userRateLimitExceeded']:
+            # Apply exponential backoff.
+            time.sleep((2 ** n) + random.randint(0, 1000) / 1000)
+          else:
+            # Other error, re-raise.
+            raise
+
+    gdrequest.execute = org_execute
+    
+    common.log("Failure: " + repr(file))
+    return False
+
 
 def findInFolder(subject, folder):
     common.log("subject: %s" % (repr(subject)), )

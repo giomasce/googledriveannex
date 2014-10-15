@@ -161,16 +161,16 @@ def postFile(subject, filename, folder):
             else:
                 common.log("Failure: " + repr(file))
                 return False
-       except errors.HttpError, e:
-          error = simplejson.loads(e.content)
-          if error.get('code') == 500 and \
+        except errors.HttpError, e:
+#          error = simplejson.loads(e.content)
+#          if error.get('code') == 500 and \
 #              error.get('errors')[0].get('reason') \
- #             in ['rateLimitExceeded', 'userRateLimitExceeded']:
-            # Apply exponential backoff.
+#             in ['rateLimitExceeded', 'userRateLimitExceeded']:
+#            # Apply exponential backoff.
             time.sleep((2 ** n) + random.randint(0, 1000) / 1000)
-          else:
-            # Other error, re-raise.
-            raise
+#          else:
+#           # Other error, re-raise.
+#           raise
 
     gdrequest.execute = org_execute
     

@@ -395,15 +395,30 @@ def transfer(line):
 
 def checkpresent(line):
     common.log("")
-    folder = setFolder(conf["folder"], common.ask("DIRHASH " + line[1]))
-    if not len(folder):
-        common.sprint('CHECKPRESENT-UNKNOWN ' + line[1] + ' this remote is not currently available')
-        return None
 
-    if checkFile(line[1], folder):
-        common.sprint('CHECKPRESENT-SUCCESS ' + line[1] + '')
-    else:
-        common.sprint('CHECKPRESENT-FAILURE ' + line[1] + '')
+
+
+    for n in range(0, 5):
+        try:
+            
+            folder = setFolder(conf["folder"], common.ask("DIRHASH " + line[1]))
+
+            if not len(folder):
+                common.sprint('CHECKPRESENT-UNKNOWN ' + line[1] + ' this remote is not currently available')
+                return None
+
+            if checkFile(line[1], folder):
+                common.sprint('CHECKPRESENT-SUCCESS ' + line[1] + '')
+                return None
+            else:
+                common.sprint('CHECKPRESENT-FAILURE ' + line[1] + '')
+                return None
+
+        except errors.HttpError, e:
+            time.sleep((2 ** n) + random.randint(0, 1000) / 1000)
+
+
+    common.sprint('CHECKPRESENT-UNKNOWN ' + line[1] + ' this remote is currently not available')
     common.log("Done")
 
 def remove(line):

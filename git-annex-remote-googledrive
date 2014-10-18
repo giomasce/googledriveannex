@@ -162,15 +162,7 @@ def postFile(subject, filename, folder):
                 common.log("Failure: " + repr(file))
                 return False
         except errors.HttpError, e:
-#          error = simplejson.loads(e.content)
-#          if error.get('code') == 500 and \
-#              error.get('errors')[0].get('reason') \
-#             in ['rateLimitExceeded', 'userRateLimitExceeded']:
-#            # Apply exponential backoff.
             time.sleep((2 ** n) + random.randint(0, 1000) / 1000)
-#          else:
-#           # Other error, re-raise.
-#           raise
 
     gdrequest.execute = org_execute
     
@@ -254,7 +246,6 @@ def findInFolder(subject, folder):
 
 def checkFile(subject, folder):
     common.log(subject)
-    global m
 
     file = findInFolder(subject, folder)
     if file:
@@ -266,7 +257,6 @@ def checkFile(subject, folder):
 
 def getFile(subject, filename, folder):
     common.log(subject)
-    global m
 
     file = findInFolder(subject, folder)
     if file:
@@ -295,7 +285,6 @@ def getFile(subject, filename, folder):
 def deleteFile(subject, folder):
     common.log(subject)
 
-    global m
 
     file = findInFolder(subject, folder)
 
@@ -310,38 +299,44 @@ def deleteFile(subject, folder):
 def setFolder(base, keys):
     common.log(repr(base) + " - " + repr(keys))
     keys = keys.replace("VALUE ", "").split("/")
+    
+    for n in range(0,5):
+        try:
+            folder = findInFolder(base, False)
+            if folder:
+                common.log("Using folder: " + repr(folder["id"]))
+                ANNEX_FOLDER = folder
+            else:
+                common.log("Creating root folder: " + repr(folder))
+                root_folder = service.files().insert(body={ 'title': base, 'mimeType': "application/vnd.google-apps.folder" }).execute()
+                common.log("root folder: " + repr(root_folder["id"]))
+                ANNEX_FOLDER = root_folder
 
-    folder = findInFolder(base, False)
-    if folder:
-        common.log("Using folder: " + repr(folder["id"]))
-        ANNEX_FOLDER = folder
-    else:
-        common.log("Creating root folder: " + repr(folder))
-        root_folder = service.files().insert(body={ 'title': base, 'mimeType': "application/vnd.google-apps.folder" }).execute()
-        common.log("root folder: " + repr(root_folder["id"]))
-        ANNEX_FOLDER = root_folder
+            folder = findInFolder(keys[0], ANNEX_FOLDER)
+            if folder:
+                common.log("Using folder1: " + repr(folder["id"]))
+                ANNEX_FOLDER = folder
+            else:
+                common.log("Creating secondary folder")
+                root_folder = service.files().insert(body={ 'title': keys[0], 'mimeType': "application/vnd.google-apps.folder", "parents": [ANNEX_FOLDER]}).execute()
+                common.log("root folder: " + repr(root_folder["id"]))
+                ANNEX_FOLDER = root_folder
 
-    folder = findInFolder(keys[0], ANNEX_FOLDER)
-    if folder:
-        common.log("Using folder1: " + repr(folder["id"]))
-        ANNEX_FOLDER = folder
-    else:
-        common.log("Creating secondary folder")
-        root_folder = service.files().insert(body={ 'title': keys[0], 'mimeType': "application/vnd.google-apps.folder", "parents": [ANNEX_FOLDER]}).execute()
-        common.log("root folder: " + repr(root_folder["id"]))
-        ANNEX_FOLDER = root_folder
+            folder = findInFolder(keys[1], ANNEX_FOLDER)
+            if folder:
+                common.log("Using folder2: " + repr(folder["id"]))
+                ANNEX_FOLDER = folder
+            else:
+                common.log("Creating tertiary folder")
+                root_folder = service.files().insert(body={ 'title': keys[1], 'mimeType': "application/vnd.google-apps.folder", "parents": [ANNEX_FOLDER]}).execute()
+                common.log("root folder: " + repr(root_folder["id"]))
+                ANNEX_FOLDER = root_folder
 
-    folder = findInFolder(keys[1], ANNEX_FOLDER)
-    if folder:
-        common.log("Using folder2: " + repr(folder["id"]))
-        ANNEX_FOLDER = folder
-    else:
-        common.log("Creating tertiary folder")
-        root_folder = service.files().insert(body={ 'title': keys[1], 'mimeType': "application/vnd.google-apps.folder", "parents": [ANNEX_FOLDER]}).execute()
-        common.log("root folder: " + repr(root_folder["id"]))
-        ANNEX_FOLDER = root_folder
-
-    return ANNEX_FOLDER
+            return ANNEX_FOLDER
+        except errors.HttpError, e:
+            time.sleep((2 ** n) + random.randint(0, 1000) / 1000)
+            n+=1
+    return None
 
 ## gaprot interface
 

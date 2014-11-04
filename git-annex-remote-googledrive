@@ -5,6 +5,7 @@ import json
 import time
 import inspect
 import webbrowser
+import random
 
 try:
     dbglevel = int(os.getenv("DBGLEVEL") or 0)
@@ -68,6 +69,9 @@ def login(cred={}):
     common.log("Done: " + repr(service) + " - " + repr(cred))
     return cred
 
+
+
+
 def postFile(subject, filename, folder):
     common.log("%s to %s - %s" % ( repr(filename), folder["id"], subject))
 
@@ -86,108 +90,88 @@ def postFile(subject, filename, folder):
         body['description'] = filename[filename.rfind(os.path.sep) + 1:]
 
 
-    gdrequest = drive_service.files().insert(body=body, media_body=media_body)
+    request = drive_service.files().insert(body=body, media_body=media_body)
 
-    file=""
+    response = None
 
-    for n in range(0, 5):
+    n=0
+    while n < 5:
         try:
-            
-            file = gdrequest.execute()  
-
-            if file:
-                common.log("Done: " + repr(file["id"]))
-                return True
-            else:
-                common.log("Failure: " + repr(file))
-                return False
+            while response is None:
+                status, response = request.next_chunk()  
+                if status:
+                    common.log(status.progress())
+                common.log(response)
+            common.log("Done: " + repr(response["id"]))
+            return True
+           
         except errors.HttpError, e:
+            common.log(e.trace())    
+            common.log("Backing off")
             time.sleep((2 ** n) + random.randint(0, 1000) / 1000)
+            common.log("Retrying")
+            n+=1
 
-    gdrequest.execute = org_execute
-    
-    common.log("Failure: " + repr(file))
+
+
+    common.log("Failure: " + repr(response))
     return False
+
+
+class GDriveError(Exception):
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return repr(self.value)
 
 
 def findInFolder(subject, folder):
+    global cache 
+
     common.log("subject: %s" % (repr(subject)), )
     common.log("folder: %s" % (repr(folder)), 2)
-    global cache
-
-    if folder:
-        tpath = (folder["id"] + "/" + subject).replace("//", "/")
-    else:
-        tpath = ("/" + subject).replace("//", "/")
-
-    if tpath in cache:
-        common.log("Returning from cache")
-        return cache[tpath]
-
-    page_token = None
-    errors = 0
-    if folder:
-        ttpath = folder["id"]
-    else:
-        ttpath = ""
-
-    while True:
+   
+    for n in range(0,5): 
         try:
+            found = False
             param = {"fields": "items"}
             if folder:
-                param["q"] = "'%s' in parents" % folder["id"]
+                param["q"] = "title = '%s' and '%s' in parents" % (subject, folder["id"])
             else:
-                param["q"] = "title = '%s'" % subject
-            if page_token:
-                param['pageToken'] = page_token
+                param["q"] = "title = '%s' and mimeType = 'application/vnd.google-apps.folder'" % (subject)
+
+    
             common.log("Calling with: " + repr(param), 1)
             files = service.files().list(**param).execute()
+            common.log("Files : %s "%repr(files))    
 
-            #result.extend(files['items'])
-
-            for res in files['items']:
-                if res["mimeType"] == "application/vnd.google-apps.folder":
-                   common.log("unFound %s folder %s with id %s" %( subject, res["title"], repr(res["id"])), 3)
-                   cache[(ttpath + "/" + res["title"]).replace("//", "/")] = res
-                   if res["title"] == subject:
-                      break
-
-                if "originalFilename" in res:
-                   common.log("unFound %s file %s with id %s" %( subject, res["originalFilename"], repr(res["id"])), 3)
-                   cache[(ttpath + "/" + res["originalFilename"]).replace("//", "/")] = res
-                   if res["originalFilename"] == subject:
-                      break
-
-            page_token = files.get('nextPageToken')
-            if not page_token:
-                common.log("No more pages, breaking", 1)
+ 
+            if len(files["items"])>1:
+                common.log("Something is weird, found the same file at least twice %s" %repr(files))
                 break
-            common.log("page_token: " + repr(page_token), 1)
-        except Exception as e:
+
+            if len(files["items"])==1 and files["items"][0]["labels"]["trashed"]==False:
+                common.log("Success on: " + repr(subject))
+                return files["items"][0]
+
+            return False
+                
+         
+
+        except errors.HttpError, e:
             common.log('An error occurred(%s): %s' % (errors, repr(e)))
-        #except errors.HttpError, error:
-            #common.log('An error occurred(%s): %s' % (errors, error))
-            errors += 1
-            if errors < 10:
-                time.sleep(errors)
-            else:
-                common.log("Fatal error: " + repr(error))
-                return False
-
-    common.log("Updated cache: " + repr(cache), 3)
-    for tmp_file in cache.keys():
-        common.log("folder: " + tmp_file + " - " + tpath, 3)
-        if tmp_file == tpath:
-            common.log("Done: " + repr(cache[tmp_file]["id"]))
-            return cache[tmp_file]
-
+            time.sleep((2 ** n) + random.randint(0, 1000) / 1000)
+ 
     common.log("Failure on: " + repr(subject))
-    return False
+    raise GDriveError("Could not complete find")
 
 def checkFile(subject, folder):
     common.log(subject)
 
     file = findInFolder(subject, folder)
+
+    common.log("Result of findInFolder %s "%repr(file))
+
     if file:
         common.log("Found: " + repr(file))
         return True
@@ -236,12 +220,13 @@ def deleteFile(subject, folder):
         common.log("Failure")
         return False
 
-def setFolder(base, keys):
-    common.log(repr(base) + " - " + repr(keys))
-    keys = keys.replace("VALUE ", "").split("/")
+def setFolder(base):
+    common.log(repr(base) )
     
     for n in range(0,5):
         try:
+            if base in cache:
+                return cache[base]
             folder = findInFolder(base, False)
             if folder:
                 common.log("Using folder: " + repr(folder["id"]))
@@ -251,27 +236,7 @@ def setFolder(base, keys):
                 root_folder = service.files().insert(body={ 'title': base, 'mimeType': "application/vnd.google-apps.folder" }).execute()
                 common.log("root folder: " + repr(root_folder["id"]))
                 ANNEX_FOLDER = root_folder
-
-            folder = findInFolder(keys[0], ANNEX_FOLDER)
-            if folder:
-                common.log("Using folder1: " + repr(folder["id"]))
-                ANNEX_FOLDER = folder
-            else:
-                common.log("Creating secondary folder")
-                root_folder = service.files().insert(body={ 'title': keys[0], 'mimeType': "application/vnd.google-apps.folder", "parents": [ANNEX_FOLDER]}).execute()
-                common.log("root folder: " + repr(root_folder["id"]))
-                ANNEX_FOLDER = root_folder
-
-            folder = findInFolder(keys[1], ANNEX_FOLDER)
-            if folder:
-                common.log("Using folder2: " + repr(folder["id"]))
-                ANNEX_FOLDER = folder
-            else:
-                common.log("Creating tertiary folder")
-                root_folder = service.files().insert(body={ 'title': keys[1], 'mimeType': "application/vnd.google-apps.folder", "parents": [ANNEX_FOLDER]}).execute()
-                common.log("root folder: " + repr(root_folder["id"]))
-                ANNEX_FOLDER = root_folder
-
+            cache[base] = ANNEX_FOLDER
             return ANNEX_FOLDER
         except errors.HttpError, e:
             time.sleep((2 ** n) + random.randint(0, 1000) / 1000)
@@ -319,29 +284,43 @@ def prepare(line):
 
 def transfer(line):
     common.log("")
-    folder = setFolder(conf["folder"], common.ask("DIRHASH " + line[2]))
 
-    if line[1] == "STORE":
-        if postFile(line[2], " ".join(line[3:]), folder):
-            common.sprint('TRANSFER-SUCCESS STORE ' + line[2] + '')
-        else:
-            common.sprint('TRANSFER-FAILURE STORE ' + line[2] + ' File could not be stored')
-    if line[1] == "RETRIEVE":
-        if getFile(line[2], " ".join(line[3:]), folder):
-            common.sprint('TRANSFER-SUCCESS RETRIEVE ' + line[2] + '')
-        else:
-            common.sprint('TRANSFER-FAILURE RETRIEVE ' + line[2] + ' File could not be retrieved')
+#    common.log(line)
+#    common.sprint('TRANSFER-FAILURE STORE ' + line[2] + ' Marek blocked this')
+#    return True
+
+    for n in range(0, 5):
+        try:
+            folder = setFolder(conf["folder"])
+
+            if line[1] == "STORE":
+                if postFile(line[2], " ".join(line[3:]), folder):
+                    common.sprint('TRANSFER-SUCCESS STORE ' + line[2] + '')
+                    break
+                else:
+                    common.sprint('TRANSFER-FAILURE STORE ' + line[2] + ' File could not be stored')
+                    break
+
+            if line[1] == "RETRIEVE":
+                if getFile(line[2], " ".join(line[3:]), folder):
+                    common.sprint('TRANSFER-SUCCESS RETRIEVE ' + line[2] + '')
+                    break
+                else:
+                    common.sprint('TRANSFER-FAILURE RETRIEVE ' + line[2] + ' File could not be retrieved')
+                    break
+            
+        except errors.HttpError, e:
+            common.log("HttpError : %s" % repr(e))
+            time.sleep((2 ** n) + random.randint(0, 1000) / 1000)
     common.log("Done")
 
 def checkpresent(line):
     common.log("")
 
-
-
     for n in range(0, 5):
         try:
             
-            folder = setFolder(conf["folder"], common.ask("DIRHASH " + line[1]))
+            folder = setFolder(conf["folder"])
 
             if not len(folder):
                 common.sprint('CHECKPRESENT-UNKNOWN ' + line[1] + ' this remote is not currently available')
@@ -355,6 +334,7 @@ def checkpresent(line):
                 return None
 
         except errors.HttpError, e:
+            common.log("HttpError : %s" % repr(e))
             time.sleep((2 ** n) + random.randint(0, 1000) / 1000)
 
 
@@ -363,7 +343,7 @@ def checkpresent(line):
 
 def remove(line):
     common.log("")
-    folder = setFolder(conf["folder"], common.ask("DIRHASH " + line[1]))
+    folder = setFolder(conf["folder"])
                 
     if deleteFile(line[1], folder):
         common.sprint('REMOVE-SUCCESS ' + line[1] + '')

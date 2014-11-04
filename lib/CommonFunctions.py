@@ -134,25 +134,7 @@ def log(description, level=0):
 ## Git annex interface
 
 def progress(size=None, progress=None):
-    global lastpct
-    log("{0} / {1}".format(size, progress), 2)
-
-    # Only print an update if pct has changed.
-
-    if progress > 0 and size > 0:
-        pct = int(float(progress) /  float(size) * 100)
-    else:
-        pct = 0
-
-    if size == progress or lastpct != pct:
-        log("Printing: " + repr(lastpct) + " - " + repr(pct), 0)
-        lastpct = pct
-
-        # Use global size_modifier to give a more accurate percentage, without the base64 bloat.
-        sprint("PROGRESS " + str(int(progress / size_modifier)))
-    else:
-        log("Ignoring: " + repr(lastpct) + " - " + repr(pct), 3)
-    log("DONE", 2)
+    sprint("PROGRESS " + str(int(progress * size)))
 
 def sprint(txt):
     try:

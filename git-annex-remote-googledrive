@@ -100,13 +100,12 @@ def postFile(subject, filename, folder):
             while response is None:
                 status, response = request.next_chunk()  
                 if status:
-                    common.log(status.progress())
-                common.log(response)
+                    common.progress(filesize,status.progress())    
             common.log("Done: " + repr(response["id"]))
             return True
            
         except errors.HttpError, e:
-            common.log(e.trace())    
+            common.log(e)    
             common.log("Backing off")
             time.sleep((2 ** n) + random.randint(0, 1000) / 1000)
             common.log("Retrying")

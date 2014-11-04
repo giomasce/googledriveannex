@@ -53,7 +53,7 @@ def login(cred={}):
         flow = OAuth2WebServerFlow(client_id, client_secret, oauth_scope, redirect_uri)
         authorize_url = flow.step1_get_authorize_url()
         if "oauth" not in cred or len(cred["oauth"]) == 0:
-            common.log('Go to the following link in your browser: ' + authorize_url, 0)
+            common.log('Go to the following link in your browser: ' + authorize_url)
             webbrowser.open(authorize_url, True, True)
             return False
         else:
@@ -74,10 +74,7 @@ def postFile(subject, filename, folder):
     filesize = os.path.getsize(filename)
     drive_service = build('drive', 'v2', http=http)
 
-    # Smallest chunksize allowed by api
-    chunksize = (256*1024)
-
-    media_body = MediaFileUpload(filename, mimetype='text/plain', chunksize=chunksize, resumable=True)
+    media_body = MediaFileUpload(filename, mimetype='text/plain', resumable=True)
     body = {
         'title': subject,
         'mimeType': 'text/plain',
@@ -88,65 +85,8 @@ def postFile(subject, filename, folder):
         common.log("Unencrypted repository, so adding filename to description")
         body['description'] = filename[filename.rfind(os.path.sep) + 1:]
 
-    def injectexecute(http=None):
-        """Execute the request.  
-        
-        Args:   
-        http: httplib2.Http, an http object to be used in place of the        
-        one the HttpRequest request object was constructed with.        
-        
-        Returns:
-        A deserialized object model of the response body as determined        
-        by the postproc.        
-        
-        Raises: 
-        apiclient.errors.HttpError if the response was not a 2xx.    
-        httplib2.HttpLib2Error if a transport error has occured.
-        """
-        if http is None:
-            http = gdrequest.http
-        if gdrequest.resumable:
-            body = None
-            while body is None:
-                try:
-                    status, body = gdrequest.next_chunk(http=http)
-                except Exception as e:
-                    common.log("Exception at gdrequest.next_chunk: " + repr(e))
-                    return False
-
-                common.log("status: " + repr(status), 2)
-                if status:
-                    common.log("status.progress: " + repr(status.progress()), 3)
-                    common.progress(filesize, int(filesize * status.progress()))
-            return body
-        else:
-            if 'content-length' not in gdrequest.headers:
-                gdrequest.headers['content-length'] = str(gdrequest.body_size)
-            # If the request URI is too long then turn it into a POST request.
-            if len(gdrequest.uri) > MAX_URI_LENGTH and gdrequest.method == 'GET':
-                gdrequest.method = 'POST'
-                gdrequest.headers['x-http-method-override'] = 'GET'
-                gdrequest.headers['content-type'] = 'application/x-www-form-urlencoded'
-                parsed = urlparse.urlparse(gdrequest.uri)
-                gdrequest.uri = urlparse.urlunparse(
-                    (parsed.scheme, parsed.netloc, parsed.path, parsed.params, None,
-                     None)
-                    )
-                gdrequest.body = parsed.query
-                gdrequest.headers['content-length'] = str(len(gdrequest.body))
-
-            resp, content = http.request(str(gdrequest.uri), method=str(gdrequest.method),
-         body=gdrequest.body, headers=gdrequest.headers)
-            for callback in gdrequest.response_callbacks:
-                callback(resp)
-            if resp.status >= 300:
-                raise HttpError(resp, content, uri=gdrequest.uri)
-        return gdrequest.postproc(resp, content)
 
     gdrequest = drive_service.files().insert(body=body, media_body=media_body)
-
-    org_execute = gdrequest.execute
-    gdrequest.execute = injectexecute
 
     file=""
 

@@ -158,6 +158,33 @@ def postFile(subject, filename, folder):
         common.log("Failure: " + repr(file))
         return False
 
+def fixDuplicatedEntries(entries):
+    global cache
+    assert len(entries) > 1
+    good = entries[0]
+    good_id = good['id']
+    bads = entries[1:]
+    directories = (good['mimeType'] == "application/vnd.google-apps.folder")
+    for bad in bads:
+        bad_id = bad['id']
+        if directories:
+            common.log("Fixing bad directory %s against good directory %s" % (bad_id, good_id))
+            assert bad['mimeType'] == "application/vnd.google-apps.folder"
+            res = children = service.children().list(folderId=bad['id'], fields='items').execute()
+            common.log("List children to be fixed: %r" % (res), 2)
+            for child in children['items']:
+                res = service.parents().delete(fileId=child['id'], parentId=bad_id).execute()
+                common.log("Delete parent from child %s: %r" % (child['id'], res), 2)
+                res = service.parents().insert(fileId=child['id'], body={'id': good_id}).execute()
+                common.log("Set new parent to child %s: %r" % (child['id'], res), 2)
+            res = service.files().delete(fileId=bad_id).execute()
+            common.log("Delete bad directory: %r" % (res), 2)
+        else:
+            common.log("Removing bad file %s (with title %s) in favor of good file %s (with title %s)" % (bad_id, bad['title'], good_id, good['title']))
+            assert bad['mimeType'] != "application/vnd.google-apps.folder"
+            res = service.files().delete(fileId=bad_id).execute()
+            common.log("Delete bad file: %r" % (res), 2)
+
 def findInFolder(subject, folder):
     common.log("subject: %s" % (repr(subject)), )
     common.log("folder: %s" % (repr(folder)), 2)
@@ -191,10 +218,18 @@ def findInFolder(subject, folder):
                 param['pageToken'] = page_token
             common.log("Calling with: " + repr(param), 1)
             files = service.files().list(**param).execute()
+            common.log("Query return cardinality: %d" % (len(files['items'])), 1)
 
             #result.extend(files['items'])
 
-            common.log("Query return cardinality: %d" % (len(files['items'])), 1)
+            # Some sanity checks
+            if len(files['items']) > 1:
+                if not folder:
+                    assert False, "Multiple base directory, I do not know how to recover"
+                else:
+                    common.log("Multiple matches found, merging them...")
+                    fixDuplicatedEntries(files['items'])
+
             for res in files['items']:
                 if res["mimeType"] == "application/vnd.google-apps.folder":
                    common.log("unFound %s folder %s with id %s" %( subject, res["title"], repr(res["id"])), 3)

@@ -185,7 +185,8 @@ def findInFolder(subject, folder):
             if folder:
                 param["q"] = "'%s' in parents" % folder["id"]
             else:
-                param["q"] = "title = '%s'" % subject
+                param["q"] = "'root' in parents"
+            param["q"] += " and title = '%s'" % (subject)
             if page_token:
                 param['pageToken'] = page_token
             common.log("Calling with: " + repr(param), 1)
@@ -193,6 +194,7 @@ def findInFolder(subject, folder):
 
             #result.extend(files['items'])
 
+            common.log("Query return cardinality: %d" % (len(files['items'])), 1)
             for res in files['items']:
                 if res["mimeType"] == "application/vnd.google-apps.folder":
                    common.log("unFound %s folder %s with id %s" %( subject, res["title"], repr(res["id"])), 3)

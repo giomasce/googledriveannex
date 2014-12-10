@@ -77,10 +77,10 @@ def postFile(subject, filename, folder):
     # Smallest chunksize allowed by api
     chunksize = (256*1024)
 
-    media_body = MediaFileUpload(filename, mimetype='text/plain', chunksize=chunksize, resumable=True)
+    media_body = MediaFileUpload(filename, mimetype='application/octet-stream', chunksize=chunksize, resumable=True)
     body = {
         'title': subject,
-        'mimeType': 'text/plain',
+        'mimeType': 'application/octet-stream',
         "parents":[folder]
         }
 

@@ -78,10 +78,10 @@ def postFile(subject, filename, folder):
     filesize = os.path.getsize(filename)
     drive_service = build('drive', 'v2', http=http)
 
-    media_body = MediaFileUpload(filename, mimetype='text/plain', resumable=True)
+    media_body = MediaFileUpload(filename, mimetype='application/octet-stream', resumable=True)
     body = {
         'title': subject,
-        'mimeType': 'text/plain',
+        'mimeType': 'application/octet-stream',
         "parents":[folder]
         }
 

@@ -229,6 +229,9 @@ def findInFolder(subject, folder):
                 else:
                     common.log("Multiple matches found, merging them...")
                     fixDuplicatedEntries(files['items'])
+                    common.log("Executing query again after fix")
+                    files = service.files().list(**param).execute()
+                    common.log("Query return cardinality: %d" % (len(files['items'])), 1)
 
             for res in files['items']:
                 if res["mimeType"] == "application/vnd.google-apps.folder":

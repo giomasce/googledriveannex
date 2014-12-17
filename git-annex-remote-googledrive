@@ -185,6 +185,10 @@ def fixDuplicatedEntries(entries):
             res = service.files().delete(fileId=bad_id).execute()
             common.log("Delete bad file: %r" % (res), 2)
 
+
+    # After fixDuplicatedEntries(), cache is to be invalidated
+    cache.clear()
+
 def findInFolder(subject, folder):
     common.log("subject: %s" % (repr(subject)), )
     common.log("folder: %s" % (repr(folder)), 2)

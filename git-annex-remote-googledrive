@@ -124,6 +124,38 @@ class GDriveError(Exception):
         return repr(self.value)
 
 
+def fixDuplicatedEntries(entries):
+    global cache
+    assert len(entries) > 1
+    good = entries[0]
+    good_id = good['id']
+    bads = entries[1:]
+    directories = (good['mimeType'] == "application/vnd.google-apps.folder")
+    for bad in bads:
+        bad_id = bad['id']
+        if directories:
+            common.log("Fixing bad directory %s against good directory %s" % (bad_id, good_id))
+            assert bad['mimeType'] == "application/vnd.google-apps.folder"
+            res = children = service.children().list(folderId=bad['id'], fields='items').execute()
+            common.log("List children to be fixed: %r" % (res), 2)
+            for child in children['items']:
+                res = service.parents().delete(fileId=child['id'], parentId=bad_id).execute()
+                common.log("Delete parent from child %s: %r" % (child['id'], res), 2)
+                res = service.parents().insert(fileId=child['id'], body={'id': good_id}).execute()
+                common.log("Set new parent to child %s: %r" % (child['id'], res), 2)
+            res = service.files().delete(fileId=bad_id).execute()
+            common.log("Delete bad directory: %r" % (res), 2)
+        else:
+            common.log("Removing bad file %s (with title %s) in favor of good file %s (with title %s)" % (bad_id, bad['title'], good_id, good['title']))
+            assert bad['mimeType'] != "application/vnd.google-apps.folder"
+            res = service.files().delete(fileId=bad_id).execute()
+            common.log("Delete bad file: %r" % (res), 2)
+
+
+    # After fixDuplicatedEntries(), cache is to be invalidated
+    cache.clear()
+
+
 def findInFolder(subject, folder):
     global cache 
 
@@ -135,19 +167,23 @@ def findInFolder(subject, folder):
             found = False
             param = {"fields": "items"}
             if folder:
-                param["q"] = "title = '%s' and '%s' in parents" % (subject, folder["id"])
+                #param["q"] = "title = '%s' and '%s' in parents" % (subject, folder["id"])
+                param["q"] = "title = '%s'" % (subject)
             else:
-                param["q"] = "title = '%s' and mimeType = 'application/vnd.google-apps.folder'" % (subject)
+                param["q"] = "title = '%s' and 'root' in parents" % (subject)
 
     
             common.log("Calling with: " + repr(param), 1)
             files = service.files().list(**param).execute()
-            common.log("Files : %s "%repr(files))    
+            common.log("Files : %s "%repr(files), 2)
 
  
             if len(files["items"])>1:
-                common.log("Something is weird, found the same file at least twice %s" %repr(files))
-                break
+                common.log("Found the same file %d times, fixing" % (len(files['items'])))
+                fixDuplicatedEntries(files['items'])
+                files = service.files().list(**param).execute()
+                if len(files["items"]) > 1:
+                    common.log("Problem was not fixed, we still have %d files" % len(files['items']))
 
             if len(files["items"])==1 and files["items"][0]["labels"]["trashed"]==False:
                 common.log("Success on: " + repr(subject))
@@ -169,7 +205,7 @@ def checkFile(subject, folder):
 
     file = findInFolder(subject, folder)
 
-    common.log("Result of findInFolder %s "%repr(file))
+    common.log("Result of findInFolder %s "% (file['id'] if file else 'False'))
 
     if file:
         common.log("Found: " + repr(file))

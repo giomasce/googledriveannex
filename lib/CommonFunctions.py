@@ -134,7 +134,7 @@ def log(description, level=0):
 ## Git annex interface
 
 def progress(size=None, progress=None):
-    sprint("PROGRESS " + str(int(progress * size)))
+    sprint("PROGRESS %d" % (progress))
 
 def sprint(txt):
     try:

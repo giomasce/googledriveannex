@@ -100,7 +100,7 @@ def postFile(subject, filename, folder):
             while response is None:
                 status, response = request.next_chunk()  
                 if status:
-                    common.progress(filesize,status.progress())    
+                    common.progress(filesize,status.progress() * filesize)
             common.log("Done: " + repr(response["id"]))
             return True
            

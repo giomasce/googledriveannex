@@ -22,7 +22,8 @@ pwd = pwd[:pwd.rfind("/")]
 if dbglevel:
     sys.stderr.write("Path: " + repr(pwd) + "\n")
 
-sys.path.append(pwd + '/lib')
+#sys.path.append(pwd + '/lib')
+sys.path = [pwd + '/lib'] + sys.path
 
 import CommonFunctions as common
 

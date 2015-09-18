@@ -224,17 +224,17 @@ def getFile(subject, filename, folder):
         download_url = file.get('downloadUrl')
         common.log("Got download_url: " + repr(download_url))
         if download_url:
-            ret = common.fetchPage({"link": download_url, "headers": [("Authorization", "Bearer " + credentials.access_token)], "progress": "true", "totalSize": file["fileSize"]})
-
-            if ret["status"] == 200:
-                common.log('Status: %s' % ret["status"])
+            try:
                 f = open(filename, "wb")
-                f.write(ret["content"])
+                ret = common.fetchPage({"link": download_url, "headers": [("Authorization", "Bearer " + credentials.access_token)], "progress": "true", "totalSize": file["fileSize"]}, write_fd=f)
+                if ret["status"] == 200:
+                    common.log('Status: %s' % ret["status"])
+                    common.log("Done")
+                    return True
+                else:
+                    common.log('An error occurred: %s' % resp)
+            finally:
                 f.close()
-                common.log("Done")
-                return True
-            else:
-                common.log('An error occurred: %s' % resp)
         else:
             common.log("The file doesn't have any content stored on Drive.")
     else:

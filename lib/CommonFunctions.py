@@ -40,7 +40,7 @@ if hasattr(sys.modules["__main__"], "opener"):
 
 
 
-def fetchPage(params={}):
+def fetchPage(params={}, write_fd=None):
     get = params.get
     link = get("link")
     log("link")
@@ -67,20 +67,27 @@ def fetchPage(params={}):
         ret_obj["new_url"] = con.geturl()
 
         if get("progress"):
-            data = False
+            data = None
+            data_len = 0
             tdata = ""
             totalsize = int(get("totalSize"))
             chunksize = totalsize / 100
+            chunksize = 4096
             if chunksize < 4096:
                 chunksize = 4096
             log("reading with progress", 1)
-            while not data or len(tdata) > 0:
+            while data_len == 0 or len(tdata) > 0:
                 tdata = con.read(chunksize)
-                if not data:
-                    data = tdata
+                data_len += len(tdata)
+                if write_fd is not None:
+                    write_fd.write(tdata)
                 else:
-                    data += tdata
-                    progress(totalsize, len(data))
+                    if not data:
+                        data = tdata
+                    else:
+                        data += tdata
+                    assert(data_len == len(data))
+                progress(totalsize, data_len)
             ret_obj["content"] = data
         else:
             log("reading", 1)

@@ -140,8 +140,13 @@ def log(description, level=0):
 
 ## Git annex interface
 
+last_progress_time = None
 def progress(size=None, progress=None):
-    sprint("PROGRESS %d" % (progress))
+    global last_progress_time
+    now = time.time()
+    if last_progress_time is None or now - last_progress_time >= 1 or size == progress or progress == 0:
+        last_progress_time = now
+        sprint("PROGRESS %d" % (progress))
 
 def sprint(txt):
     try:

@@ -232,7 +232,7 @@ def getFile(subject, filename, folder):
                     common.log("Done")
                     return True
                 else:
-                    common.log('An error occurred: %s' % resp)
+                    common.log('An error occurred: %s' % ret)
             finally:
                 f.close()
         else:

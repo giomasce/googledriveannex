@@ -1,0 +1,122 @@
+#!/usr/bin/env python2
+# -*- coding: utf-8 -*-
+
+import sys
+import git
+import re
+import subprocess
+import base64
+import collections
+import os
+import hmac
+import hashlib
+import httplib2
+import json
+import urllib2
+import tempfile
+
+from oauth2client.file import Credentials
+from apiclient.discovery import build
+
+# Select symlink content that is pointing to git-annex objects
+GIT_ANNEX_LINK_RE = re.compile(r'(\.\./)*\.git/annex/objects/[^.]*/[^.]*/(?P<key>[^.]*)/(?P=key)')
+
+DEFAULT_HMAC_HASH = hashlib.sha1
+DEFAULT_HMAC_HASH_NAME = 'GPGHMACSHA1'
+
+AnnexRemote = collections.namedtuple('AnnexRemote', ['uuid', 'cipher', 'cipherkeys', 'name', 'encryption', 'timestamp', 'type', 'externaltype', 'stored_creds'])
+Cipher = collections.namedtuple('Cipher', ['hmac', 'key'])
+
+def cipher_for_remote(remote):
+    if remote.encryption == 'shared':
+        cipher = base64.b64decode(remote.cipher)
+        return cipher
+    else:
+        with tempfile.TemporaryFile() as keyblob:
+            keyblob.write("-----BEGIN PGP MESSAGE-----\n\n")
+            keyblob.write(remote.cipher)
+            keyblob.write("\n-----END PGP MESSAGE-----\n")
+            keyblob.seek(0)
+            cipher = subprocess.check_output(['gpg', '--decrypt', '--batch', '--use-agent'], stdin=keyblob)
+            return cipher
+
+def split_cipher(cipher):
+    return Cipher(hmac=cipher[:256], key=cipher[256:])
+
+def iter_remotes():
+    remote_log = [blob for blob in git.Repo('.', search_parent_directories=True).tree('git-annex')
+        if isinstance(blob, git.Blob) and blob.name == 'remote.log']
+    assert len(remote_log) == 1
+    remote_log = remote_log[0]
+    for remote in remote_log.data_stream.read().splitlines():
+        config = remote.split(' ')
+        config_hash = dict()
+        config_hash['uuid'], config = config[0], config[1:]
+        for config_item in config:
+            key, value = config_item.split('=', 1)
+            if key in ['cipher', 'cipherkeys', 'name', 'encryption', 'timestamp', 'type', 'externaltype', 'stored_creds']:
+                config_hash[key] = value
+        if config_hash['encryption'] == 'shared':
+            config_hash['cipherkeys'] = None
+        if config_hash['type'] != 'external':
+            config_hash['externaltype'] = None
+        config_hash['timestamp'] = float(config_hash['timestamp'][:1])
+        yield AnnexRemote(**config_hash)
+
+def select_remote():
+    remotes = list(iter_remotes())
+    remote = sorted([r for r in remotes if r.type == 'external' and r.externaltype == 'googledrive'], key=lambda x: x.timestamp)[-1]
+    cipher = split_cipher(cipher_for_remote(remote))
+    return remote, cipher
+
+def compute_hmac_key(input_key, cipher):
+    return "%s--%s" % (DEFAULT_HMAC_HASH_NAME, hmac.new(cipher.hmac, input_key, DEFAULT_HMAC_HASH).hexdigest())
+
+def setup_googledrive(remote):
+    # FIXME - Awful tricks around, and also probably prone to bugs...
+    credentials = Credentials.new_from_json(json.loads(remote.stored_creds).replace("&32;", " "))
+    http = httplib2.Http()
+    drive_http = credentials.authorize(http)
+    service = build('drive', 'v2', http=drive_http)
+    return service, credentials
+
+def decrypt_file(cipher, conn):
+    with tempfile.NamedTemporaryFile() as keyfile:
+        fd = os.open(keyfile.name, os.O_RDONLY)
+        keyfile.write(cipher.key)
+        keyfile.seek(0)
+        gpg_process = subprocess.Popen(['gpg', '--quiet', '--trust-model', 'always', '--batch', '--passphrase-fd', str(fd)], stdin=conn, stdout=None, stderr=None)
+        gpg_process.wait()
+        os.close(fd)
+    return gpg_process.returncode
+
+def request_file(service, hmac_key, credentials):
+    [res] = service.files().list(fields="items", q="title = '%s'" % (hmac_key)).execute()['items']
+    file_id = res['id']
+    res_url = "https://www.googleapis.com/drive/v2/files/%s?alt=media" % (file_id)
+    request = urllib2.Request(res_url)
+    request.add_header("Authorization", "Bearer %s" % (credentials.access_token))
+    conn = urllib2.urlopen(request)
+    return conn
+
+def main():
+    filename = sys.argv[1]
+    match = GIT_ANNEX_LINK_RE.match(os.readlink(filename))
+    if match:
+        key = match.groupdict()['key']
+    else:
+        raise Exception("Specified file is not a link to annexed content")
+    print >> sys.stderr, "Retrieving content with key %s" % (key)
+
+    remote, cipher = select_remote()
+    print >> sys.stderr, "Using remote with name %s" % (remote.name)
+
+    hmac_key = compute_hmac_key(key, cipher)
+    print >> sys.stderr, "Fetching encrypted key %s" % (hmac_key)
+
+    service, credentials = setup_googledrive(remote)
+    conn = request_file(service, hmac_key, credentials)
+    decrypt_file(cipher, conn)
+
+if __name__ == '__main__':
+    main()

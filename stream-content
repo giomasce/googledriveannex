@@ -24,6 +24,8 @@ GIT_ANNEX_LINK_RE = re.compile(r'(\.\./)*\.git/annex/objects/[^.]*/[^.]*/(?P<key
 DEFAULT_HMAC_HASH = hashlib.sha1
 DEFAULT_HMAC_HASH_NAME = 'GPGHMACSHA1'
 
+BUFSIZE = 4096
+
 AnnexRemote = collections.namedtuple('AnnexRemote', ['uuid', 'cipher', 'cipherkeys', 'name', 'encryption', 'timestamp', 'type', 'externaltype', 'stored_creds'])
 Cipher = collections.namedtuple('Cipher', ['hmac', 'key'])
 
@@ -85,7 +87,12 @@ def decrypt_file(cipher, conn):
         fd = os.open(keyfile.name, os.O_RDONLY)
         keyfile.write(cipher.key)
         keyfile.seek(0)
-        gpg_process = subprocess.Popen(['gpg', '--quiet', '--trust-model', 'always', '--batch', '--passphrase-fd', str(fd)], stdin=conn, stdout=None, stderr=None)
+        gpg_process = subprocess.Popen(['gpg', '--quiet', '--trust-model', 'always', '--batch', '--passphrase-fd', str(fd)], stdin=subprocess.PIPE, stdout=None, stderr=None)
+        data = conn.read(BUFSIZE)
+        while data:
+            gpg_process.stdin.write(data)
+            data = conn.read(BUFSIZE)
+        gpg_process.stdin.close()
         gpg_process.wait()
         os.close(fd)
     return gpg_process.returncode

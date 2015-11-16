@@ -397,5 +397,9 @@ if dbglevel > 0:
 
 common.log("START")
 if __name__ == '__main__':
-    common.startRemote()
+    try:
+        common.startRemote()
+    except:
+        import traceback
+        common.log("Failure with exception:\n%s" % (traceback.format_exc()))
 common.log("STOP: %ss" % int(time.time() - t))

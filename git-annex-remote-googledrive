@@ -30,7 +30,7 @@ import CommonFunctions as common
 from apiclient.discovery import build
 from apiclient.http import MediaFileUpload
 import oauth2client.client
-from oauth2client.client import OAuth2WebServerFlow
+from oauth2client.client import OAuth2WebServerFlow, AccessTokenRefreshError
 from oauth2client.file import Storage
 from oauth2client.file import Credentials
 from apiclient import errors
@@ -67,6 +67,12 @@ def login(cred={}):
     http = credentials.authorize(http)
     common.log("Done: " + repr(http) + " - " + repr(credentials) + " - " + repr(cred))
     service = build('drive', 'v2', http=http)
+    # Perform a random request just to test if the login is actually
+    # successfull; sometimes error login succeed, but usage fails
+    try:
+        service.about().get().execute()
+    except AccessTokenRefreshError:
+        return False
     common.log("Done: " + repr(service) + " - " + repr(cred))
     return cred
 
@@ -286,7 +292,7 @@ def initremote(line):
     oauth = os.getenv("OAUTH") or ""
     encryption = common.getConfig("encryption")
     myfolder = common.getConfig("folder")
-    if not common.getConfig("stored_creds"):
+    if oauth != '':
         stored_creds = sys.modules["__main__"].login({"oauth": oauth})
         if len(myfolder) and stored_creds:
             common.sprint('SETCONFIG myfolder ' + myfolder + '')
@@ -310,10 +316,19 @@ def prepare(line):
         conf["folder"] = myfolder
         conf["encrypted"] = encryption.lower().find("none") == -1
         common.sprint('DEBUG ' + plugin)
-        if login(stored_creds):
-            common.sprint('PREPARE-SUCCESS')
+        oauth = os.getenv("OAUTH") or ""
+        if oauth == "":
+            if login(stored_creds):
+                common.sprint('PREPARE-SUCCESS')
+            else:
+                flow = OAuth2WebServerFlow(client_id, client_secret, oauth_scope, redirect_uri)
+                authorize_url = flow.step1_get_authorize_url()
+                common.sprint('PREPARE-FAILURE Login failure. Use the following link to acquire another auth credential: %s' % (authorize_url))
         else:
-            common.sprint('PREPARE-FAILURE Login failure.')
+            stored_creds = login({"oauth": oauth})
+            if stored_creds:
+                common.sprint('SETCONFIG stored_creds ' + json.dumps(stored_creds) + '')
+                common.sprint('PREPARE-SUCCESS')
     else:
         common.sprint('PREPARE-FAILURE You need to set USERNAME and PASSWORD environment variables and folder and encryption parameters for the remote.')
     common.log("")

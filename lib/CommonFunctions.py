@@ -168,8 +168,10 @@ def getConfig(key):
     return value
 
 def ask(question):
+    log("Asking question: %s" % (question))
     sprint(question)
     value = sys.stdin.readline().replace("\n", "")
+    log("Got answer: %s" % (value))
     return value
 
 def updateWanted(size, filetypes):
@@ -231,6 +233,8 @@ def startRemote():
         if len(line) == 0:
             log("Error, got empty line")
             continue
+
+        log("Received line: %s" % (line))
 
         line = line.split(" ")
 

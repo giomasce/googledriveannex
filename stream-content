@@ -15,13 +15,7 @@ import json
 import urllib2
 import tempfile
 
-pwd = os.path.realpath(__file__)
-pwd = pwd[:pwd.rfind("/")]
-
-#sys.path.append(pwd + '/lib')
-sys.path = [pwd + '/lib'] + sys.path
-
-from oauth2client.file import Credentials
+from oauth2client.client import Credentials
 from apiclient.discovery import build
 
 # Select symlink content that is pointing to git-annex objects

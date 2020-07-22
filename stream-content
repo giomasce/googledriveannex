@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 import sys
@@ -12,7 +12,7 @@ import hmac
 import hashlib
 import httplib2
 import json
-import urllib2
+import urllib.request, urllib.error, urllib.parse
 import tempfile
 
 from oauth2client.client import Credentials
@@ -51,7 +51,7 @@ def iter_remotes():
     assert len(remote_log) == 1
     remote_log = remote_log[0]
     for remote in remote_log.data_stream.read().splitlines():
-        config = remote.split(' ')
+        config = remote.decode('utf-8').split(' ')
         config_hash = dict()
         config_hash['uuid'], config = config[0], config[1:]
         for config_item in config:
@@ -72,7 +72,7 @@ def select_remote():
     return remote, cipher
 
 def compute_hmac_key(input_key, cipher):
-    return "%s--%s" % (DEFAULT_HMAC_HASH_NAME, hmac.new(cipher.hmac, input_key, DEFAULT_HMAC_HASH).hexdigest())
+    return "%s--%s" % (DEFAULT_HMAC_HASH_NAME, hmac.new(cipher.hmac, input_key.encode('ascii'), DEFAULT_HMAC_HASH).hexdigest())
 
 def setup_googledrive(remote):
     # FIXME - Awful tricks around, and also probably prone to bugs...
@@ -85,9 +85,10 @@ def setup_googledrive(remote):
 def decrypt_file(cipher, conn):
     with tempfile.NamedTemporaryFile() as keyfile:
         fd = os.open(keyfile.name, os.O_RDONLY)
+        os.set_inheritable(fd, True)
         keyfile.write(cipher.key)
         keyfile.seek(0)
-        gpg_process = subprocess.Popen(['gpg', '--quiet', '--trust-model', 'always', '--batch', '--passphrase-fd', str(fd)], stdin=subprocess.PIPE, stdout=None, stderr=None)
+        gpg_process = subprocess.Popen(['gpg', '--quiet', '--trust-model', 'always', '--batch', '--passphrase-fd', str(fd)], stdin=subprocess.PIPE, stdout=None, stderr=None, close_fds=False)
         data = conn.read(BUFSIZE)
         while data:
             gpg_process.stdin.write(data)
@@ -101,9 +102,9 @@ def request_file(service, hmac_key, credentials):
     [res] = service.files().list(fields="items", q="title = '%s'" % (hmac_key)).execute()['items']
     file_id = res['id']
     res_url = "https://www.googleapis.com/drive/v2/files/%s?alt=media" % (file_id)
-    request = urllib2.Request(res_url)
+    request = urllib.request.Request(res_url)
     request.add_header("Authorization", "Bearer %s" % (credentials.access_token))
-    conn = urllib2.urlopen(request)
+    conn = urllib.request.urlopen(request)
     return conn
 
 def main():
@@ -113,13 +114,13 @@ def main():
         key = match.groupdict()['key']
     else:
         raise Exception("Specified file is not a link to annexed content")
-    print >> sys.stderr, "Retrieving content with key %s" % (key)
+    print("Retrieving content with key %s" % (key), file=sys.stderr)
 
     remote, cipher = select_remote()
-    print >> sys.stderr, "Using remote with name %s" % (remote.name)
+    print("Using remote with name %s" % (remote.name), file=sys.stderr)
 
     hmac_key = compute_hmac_key(key, cipher)
-    print >> sys.stderr, "Fetching encrypted key %s" % (hmac_key)
+    print("Fetching encrypted key %s" % (hmac_key), file=sys.stderr)
 
     service, credentials = setup_googledrive(remote)
     conn = request_file(service, hmac_key, credentials)

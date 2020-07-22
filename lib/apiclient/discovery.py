@@ -35,17 +35,17 @@ import logging
 import mimetypes
 import os
 import re
-import urllib
-import urlparse
+import urllib.request, urllib.parse, urllib.error
+import urllib.parse
 
 try:
-  from urlparse import parse_qsl
+  from urllib.parse import parse_qsl
 except ImportError:
   from cgi import parse_qsl
 
 # Third-party imports
 import httplib2
-import mimeparse
+from . import mimeparse
 import uritemplate
 
 # Local imports
@@ -199,7 +199,7 @@ def build(serviceName,
 
   try:
     service = simplejson.loads(content)
-  except ValueError, e:
+  except ValueError as e:
     logger.error('Failed to parse as JSON: ' + content)
     raise InvalidJsonError()
 
@@ -244,9 +244,9 @@ def build_from_document(
   # future is no longer used.
   future = {}
 
-  if isinstance(service, basestring):
+  if isinstance(service, bytes):
     service = simplejson.loads(service)
-  base = urlparse.urljoin(service['rootUrl'], service['servicePath'])
+  base = urllib.parse.urljoin(service['rootUrl'], service['servicePath'])
   schema = Schemas(service)
 
   if model is None:
@@ -271,7 +271,7 @@ def _cast(value, schema_type):
     A string representation of 'value' based on the schema_type.
   """
   if schema_type == 'string':
-    if type(value) == type('') or type(value) == type(u''):
+    if type(value) == type('') or type(value) == type(''):
       return value
     else:
       return str(value)
@@ -282,7 +282,7 @@ def _cast(value, schema_type):
   elif schema_type == 'boolean':
     return str(bool(value)).lower()
   else:
-    if type(value) == type('') or type(value) == type(u''):
+    if type(value) == type('') or type(value) == type(''):
       return value
     else:
       return str(value)
@@ -298,13 +298,13 @@ def _media_size_to_long(maxSize):
     The size as an integer value.
   """
   if len(maxSize) < 2:
-    return 0L
+    return 0
   units = maxSize[-2:].upper()
   bit_shift = _MEDIA_SIZE_BIT_SHIFTS.get(units)
   if bit_shift is not None:
-    return long(maxSize[:-2]) << bit_shift
+    return int(maxSize[:-2]) << bit_shift
   else:
-    return long(maxSize)
+    return int(maxSize)
 
 
 def _media_path_url_from_info(root_desc, path_url):
@@ -354,7 +354,7 @@ def _fix_up_parameters(method_desc, root_desc, http_method):
   parameters = method_desc.setdefault('parameters', {})
 
   # Add in the parameters common to all methods.
-  for name, description in root_desc.get('parameters', {}).iteritems():
+  for name, description in root_desc.get('parameters', {}).items():
     parameters[name] = description
 
   # Add in undocumented query parameters.
@@ -520,7 +520,7 @@ class ResourceMethodParameters(object):
           comes from the dictionary of methods stored in the 'methods' key in
           the deserialized discovery document.
     """
-    for arg, desc in method_desc.get('parameters', {}).iteritems():
+    for arg, desc in method_desc.get('parameters', {}).items():
       param = key2param(arg)
       self.argmap[param] = arg
 
@@ -568,12 +568,12 @@ def createMethod(methodName, methodDesc, rootDesc, schema):
   def method(self, **kwargs):
     # Don't bother with doc string, it will be over-written by createMethod.
 
-    for name in kwargs.iterkeys():
+    for name in kwargs.keys():
       if name not in parameters.argmap:
         raise TypeError('Got an unexpected keyword argument "%s"' % name)
 
     # Remove args that have a value of None.
-    keys = kwargs.keys()
+    keys = list(kwargs.keys())
     for name in keys:
       if kwargs[name] is None:
         del kwargs[name]
@@ -582,9 +582,9 @@ def createMethod(methodName, methodDesc, rootDesc, schema):
       if name not in kwargs:
         raise TypeError('Missing required parameter "%s"' % name)
 
-    for name, regex in parameters.pattern_params.iteritems():
+    for name, regex in parameters.pattern_params.items():
       if name in kwargs:
-        if isinstance(kwargs[name], basestring):
+        if isinstance(kwargs[name], str):
           pvalues = [kwargs[name]]
         else:
           pvalues = kwargs[name]
@@ -594,13 +594,13 @@ def createMethod(methodName, methodDesc, rootDesc, schema):
                 'Parameter "%s" value "%s" does not match the pattern "%s"' %
                 (name, pvalue, regex))
 
-    for name, enums in parameters.enum_params.iteritems():
+    for name, enums in parameters.enum_params.items():
       if name in kwargs:
         # We need to handle the case of a repeated enum
         # name differently, since we want to handle both
         # arg='value' and arg=['value1', 'value2']
         if (name in parameters.repeated_params and
-            not isinstance(kwargs[name], basestring)):
+            not isinstance(kwargs[name], str)):
           values = kwargs[name]
         else:
           values = [kwargs[name]]
@@ -612,7 +612,7 @@ def createMethod(methodName, methodDesc, rootDesc, schema):
 
     actual_query_params = {}
     actual_path_params = {}
-    for key, value in kwargs.iteritems():
+    for key, value in kwargs.items():
       to_type = parameters.param_types.get(key, 'string')
       # For repeated parameters we cast each member of the list.
       if key in parameters.repeated_params and type(value) == type([]):
@@ -640,14 +640,14 @@ def createMethod(methodName, methodDesc, rootDesc, schema):
         actual_path_params, actual_query_params, body_value)
 
     expanded_url = uritemplate.expand(pathUrl, params)
-    url = urlparse.urljoin(self._baseUrl, expanded_url + query)
+    url = urllib.parse.urljoin(self._baseUrl, expanded_url + query)
 
     resumable = None
     multipart_boundary = ''
 
     if media_filename:
       # Ensure we end up with a valid MediaUpload object.
-      if isinstance(media_filename, basestring):
+      if isinstance(media_filename, str):
         (media_mime_type, encoding) = mimetypes.guess_type(media_filename)
         if media_mime_type is None:
           raise UnknownFileType(media_filename)
@@ -666,7 +666,7 @@ def createMethod(methodName, methodDesc, rootDesc, schema):
 
       # Use the media path uri for media uploads
       expanded_url = uritemplate.expand(mediaPathUrl, params)
-      url = urlparse.urljoin(self._baseUrl, expanded_url + query)
+      url = urllib.parse.urljoin(self._baseUrl, expanded_url + query)
       if media_upload.resumable():
         url = _add_query_parameter(url, 'uploadType', 'resumable')
 
@@ -721,10 +721,10 @@ def createMethod(methodName, methodDesc, rootDesc, schema):
     docs.append('Args:\n')
 
   # Skip undocumented params and params common to all methods.
-  skip_parameters = rootDesc.get('parameters', {}).keys()
+  skip_parameters = list(rootDesc.get('parameters', {}).keys())
   skip_parameters.extend(STACK_QUERY_PARAMETERS)
 
-  all_args = parameters.argmap.keys()
+  all_args = list(parameters.argmap.keys())
   args_ordered = [key2param(s) for s in methodDesc.get('parameterOrder', [])]
 
   # Move body to the front of the line.
@@ -803,14 +803,14 @@ Returns:
     request = copy.copy(previous_request)
 
     pageToken = previous_response['nextPageToken']
-    parsed = list(urlparse.urlparse(request.uri))
+    parsed = list(urllib.parse.urlparse(request.uri))
     q = parse_qsl(parsed[4])
 
     # Find and remove old 'pageToken' value from URI
     newq = [(key, value) for (key, value) in q if key != 'pageToken']
     newq.append(('pageToken', pageToken))
-    parsed[4] = urllib.urlencode(newq)
-    uri = urlparse.urlunparse(parsed)
+    parsed[4] = urllib.parse.urlencode(newq)
+    uri = urllib.parse.urlunparse(parsed)
 
     request.uri = uri
 
@@ -896,7 +896,7 @@ class Resource(object):
   def _add_basic_methods(self, resourceDesc, rootDesc, schema):
     # Add basic methods to Resource
     if 'methods' in resourceDesc:
-      for methodName, methodDesc in resourceDesc['methods'].iteritems():
+      for methodName, methodDesc in resourceDesc['methods'].items():
         fixedMethodName, method = createMethod(
             methodName, methodDesc, rootDesc, schema)
         self._set_dynamic_attr(fixedMethodName,
@@ -935,7 +935,7 @@ class Resource(object):
 
         return (methodName, methodResource)
 
-      for methodName, methodDesc in resourceDesc['resources'].iteritems():
+      for methodName, methodDesc in resourceDesc['resources'].items():
         fixedMethodName, method = createResourceMethod(methodName, methodDesc)
         self._set_dynamic_attr(fixedMethodName,
                                method.__get__(self, self.__class__))
@@ -945,7 +945,7 @@ class Resource(object):
     # Look for response bodies in schema that contain nextPageToken, and methods
     # that take a pageToken parameter.
     if 'methods' in resourceDesc:
-      for methodName, methodDesc in resourceDesc['methods'].iteritems():
+      for methodName, methodDesc in resourceDesc['methods'].items():
         if 'response' in methodDesc:
           responseSchema = methodDesc['response']
           if '$ref' in responseSchema:

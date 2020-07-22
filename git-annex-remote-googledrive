@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 import os
 import sys
 import json
@@ -49,7 +49,7 @@ cache = {}
 def login(cred={}):
     common.log("")
     global service, credentials, http
-    if isinstance(cred, unicode) or isinstance(cred, str):
+    if isinstance(cred, str) or isinstance(cred, str):
         credentials = Credentials.new_from_json(cred)
     else:
         flow = OAuth2WebServerFlow(client_id, client_secret, oauth_scope, redirect_uri)
@@ -111,7 +111,7 @@ def postFile(subject, filename, folder):
             common.log("Done: " + repr(response["id"]))
             return True
            
-        except errors.HttpError, e:
+        except errors.HttpError as e:
             common.log(e)    
             common.log("Backing off")
             time.sleep((2 ** n) + random.randint(0, 1000) / 1000)
@@ -200,7 +200,7 @@ def findInFolder(subject, folder):
                 
          
 
-        except errors.HttpError, e:
+        except errors.HttpError as e:
             common.log('An error occurred(%s): %s' % (errors, repr(e)))
             time.sleep((2 ** n) + random.randint(0, 1000) / 1000)
  
@@ -280,7 +280,7 @@ def setFolder(base):
                 ANNEX_FOLDER = root_folder
             cache[base] = ANNEX_FOLDER
             return ANNEX_FOLDER
-        except errors.HttpError, e:
+        except errors.HttpError as e:
             time.sleep((2 ** n) + random.randint(0, 1000) / 1000)
             n+=1
     return None
@@ -360,7 +360,7 @@ def transfer(line):
                     common.sprint('TRANSFER-FAILURE RETRIEVE ' + line[2] + ' File could not be retrieved')
                     break
             
-        except errors.HttpError, e:
+        except errors.HttpError as e:
             common.log("HttpError : %s" % repr(e))
             time.sleep((2 ** n) + random.randint(0, 1000) / 1000)
     common.log("Done")
@@ -384,7 +384,7 @@ def checkpresent(line):
                 common.sprint('CHECKPRESENT-FAILURE ' + line[1] + '')
                 return None
 
-        except errors.HttpError, e:
+        except errors.HttpError as e:
             common.log("HttpError : %s" % repr(e))
             time.sleep((2 ** n) + random.randint(0, 1000) / 1000)
 

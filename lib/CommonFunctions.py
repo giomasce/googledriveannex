@@ -17,8 +17,7 @@
 '''
 import os
 import sys
-import urllib
-import urllib2
+import urllib.request, urllib.parse, urllib.error
 import re
 import io
 import inspect
@@ -32,11 +31,11 @@ size_modifier = 1.0
 lastpct = 0
 
 
-USERAGENT = u"Mozilla/5.0 (Windows NT 6.2; Win64; x64; rv:16.0.1) Gecko/20121011 Firefox/16.0.1"
+USERAGENT = "Mozilla/5.0 (Windows NT 6.2; Win64; x64; rv:16.0.1) Gecko/20121011 Firefox/16.0.1"
 
 
 if hasattr(sys.modules["__main__"], "opener"):
-    urllib2.install_opener(sys.modules["__main__"].opener)
+    urllib.request.install_opener(sys.modules["__main__"].opener)
 
 
 
@@ -48,7 +47,7 @@ def fetchPage(params={}, write_fd=None):
     ret_obj = { "new_url": link}
 
 
-    request = urllib2.Request(link)
+    request = urllib.request.Request(link)
 
     if get("headers"):
         for head in get("headers"):
@@ -62,8 +61,8 @@ def fetchPage(params={}, write_fd=None):
     try:
         log("connecting to server...", 1)
 
-        con = urllib2.urlopen(request)
-        ret_obj["header"] = con.info().headers
+        con = urllib.request.urlopen(request)
+        ret_obj["header"] = con.info()
         ret_obj["new_url"] = con.geturl()
 
         if get("progress"):
@@ -99,7 +98,7 @@ def fetchPage(params={}, write_fd=None):
         ret_obj["status"] = 200
         return ret_obj
 
-    except urllib2.HTTPError, e:
+    except urllib.error.HTTPError as e:
         err = str(e)
         log("HTTPError : " + err)
         log("HTTPError - Headers: " + str(e.headers) + " - Content: " + repr(e.fp.read()))
@@ -114,7 +113,7 @@ def fetchPage(params={}, write_fd=None):
         ret_obj["status"] = 500
         return ret_obj
 
-    except urllib2.URLError, e:
+    except urllib.error.URLError as e:
         err = str(e)
         log("URLError : " + err)
 
